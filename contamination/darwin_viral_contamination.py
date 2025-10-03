@@ -37,7 +37,7 @@ class DarwinViralContamination:
     4. Adicionar auto-evolução em background
     """
     
-    def __init__(self, root_dir: Path = Path("/root")):
+    def __init__(self, root_dir: Path = Path("/workspace")):
         self.root_dir = root_dir
         self.infected_files: Set[str] = set()
         self.infection_log: List[Dict] = []
@@ -245,7 +245,10 @@ except:
                 self.evolvable_classes_found += 1
         
         logger.info(f"\n   ✅ Evoluíveis: {len(evolvable_files)}/{len(all_files)}")
-        logger.info(f"   📊 Taxa: {len(evolvable_files)/len(all_files)*100:.1f}%")
+        if len(all_files) > 0:
+            logger.info(f"   📊 Taxa: {len(evolvable_files)/len(all_files)*100:.1f}%")
+        else:
+            logger.info(f"   📊 Taxa: N/A (nenhum arquivo encontrado)")
         
         # Fase 3: Infectar
         logger.info("\n🦠 FASE 3: Injetando Darwin Engine...")
@@ -303,7 +306,7 @@ except:
     
     def save_infection_log(self):
         """Salva log de infecção"""
-        log_path = Path("/root/darwin_infection_log.json")
+        log_path = Path("/workspace/darwin_infection_log.json")
         
         with open(log_path, 'w') as f:
             json.dump({
