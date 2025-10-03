@@ -12,7 +12,6 @@ STATUS: IMPLEMENTAÇÃO COMPLETA
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path("/root/intelligence_system")))
 
 import logging
 import ast
@@ -151,15 +150,12 @@ class DarwinViralContamination:
             # Adicionar import no topo (após imports existentes)
             darwin_import = """
 # ✅ DARWIN ENGINE INJECTED - AUTO-EVOLUTION ENABLED
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path('/root/intelligence_system')))
 try:
-    from extracted_algorithms.darwin_engine_real import make_evolvable
+    from core.make_evolvable import make_evolvable  # official decorator
     DARWIN_AVAILABLE = True
-except:
+except Exception:
     DARWIN_AVAILABLE = False
-    def make_evolvable(cls):  # Fallback decorator
+    def make_evolvable(cls):
         return cls
 
 """
