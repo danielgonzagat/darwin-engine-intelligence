@@ -1,5 +1,11 @@
 # Darwin Engine - Real Intelligence System
 
+![Python](https://img.shields.io/badge/python-3.10+-blue)
+![PyTorch](https://img.shields.io/badge/pytorch-2.0+-orange)
+![Score](https://img.shields.io/badge/score-96%25-success)
+![Accuracy](https://img.shields.io/badge/accuracy-97.13%25-success)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 🧬 Sistema de Evolução Darwiniana para Inteligência Artificial Real
 
 ## 🔥 Resultado da Auditoria Profissional
