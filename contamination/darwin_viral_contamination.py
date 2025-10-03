@@ -37,7 +37,7 @@ class DarwinViralContamination:
     """
     
     def __init__(self, root_dir: Path = Path("/root")):
-        self.root_dir = root_dir
+        self.root_dir = Path(root_dir) if isinstance(root_dir, str) else root_dir
         self.infected_files: Set[str] = set()
         self.infection_log: List[Dict] = []
         self.evolvable_classes_found = 0
