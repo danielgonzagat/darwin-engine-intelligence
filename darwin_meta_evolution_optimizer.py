@@ -507,8 +507,8 @@ def example_meta_evolution():
         print(f"   {key}: {value}")
 
     status = meta_engine.get_status()
-    print("
-📈 STATUS META:"    print(f"   População meta: {status['meta_population_size']}")
+    print("\n📈 STATUS META:")
+    print(f"   População meta: {status['meta_population_size']}")
     print(f"   Melhor fitness: {status['best_meta_fitness']:.4f}")
     print(f"   Diversidade meta: {status['meta_diversity']:.4f}")
 

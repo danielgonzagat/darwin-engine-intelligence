@@ -34,6 +34,7 @@ from copy import deepcopy
 import json
 import hashlib
 import time
+import os
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
 import math
@@ -206,7 +207,17 @@ class CMAESParadigm(EvolutionaryParadigm):
         for _ in range(len(population)):
             # Amostrar do modelo atual
             genome_values = np.random.multivariate_normal(self.mean, self.covariance)
-            genome_dict = {key: genome_values[i] for i, key in enumerate(genome_keys)}
+            genome_dict = {}
+
+            # Converter valores de volta para tipos apropriados
+            for i, key in enumerate(genome_keys):
+                value = genome_values[i]
+                if key in ['num_layers', 'hidden_size', 'batch_size', 'program_length', 'memory_size', 'num_blocks', 'variable_count', 'equation_complexity']:
+                    # Valores que devem ser inteiros
+                    genome_dict[key] = max(1, int(round(value)))
+                else:
+                    # Manter como float para outros parâmetros
+                    genome_dict[key] = float(value)
 
             individual = population[0].__class__(genome_dict)
             new_population.append(individual)
@@ -758,7 +769,13 @@ class DeltaLinfCalculator:
         for key, value in perturbed_genome.items():
             if isinstance(value, (int, float)):
                 noise = random.uniform(-0.01, 0.01) * abs(value)
-                perturbed_genome[key] = value + noise
+                perturbed_value = value + noise
+
+                # Converter para tipos apropriados
+                if key in ['num_layers', 'hidden_size', 'batch_size', 'program_length', 'memory_size', 'num_blocks', 'variable_count', 'equation_complexity']:
+                    perturbed_genome[key] = max(1, int(round(perturbed_value)))
+                else:
+                    perturbed_genome[key] = float(perturbed_value)
 
         perturbed_individual = HybridIndividual(perturbed_genome, individual.individual_type)
         # Retorna fitness simulado (em produção seria avaliação real)
@@ -2331,8 +2348,8 @@ def example_mnist_evolution():
 
     # Resultado final
     status = darwin.get_status()
-    print("
-🏆 RESULTADO FINAL:"    print(f"Geração: {status['generation']}")
+    print("\n🏆 RESULTADO FINAL:")
+    print(f"Geração: {status['generation']}")
     print(f"População: {status['population_size']}")
     print(f"Emergência detectada: {status['emergence_detected']}")
 
@@ -2410,8 +2427,8 @@ if __name__ == "__main__":
     print("   ✅ Escalabilidade universal")
     print("   ✅ Emergência inevitável")
 
-    print("
-🎯 Darwin Ideal ALCANÇADO! Sistema completo e funcional."    print(f"   Gerações executadas: {darwin.generation}")
+    print("\n🎯 Darwin Ideal ALCANÇADO! Sistema completo e funcional.")
+    print(f"   Gerações executadas: {darwin.generation}")
     print(f"   População final: {len(darwin.population)} indivíduos")
     print(f"   Emergência detectada: {darwin.emergence_detected}")
 

@@ -255,8 +255,7 @@ class DarwinDashboard:
             'darwin.diversity'
         ]
 
-        print("
-🚀 DARWIN DASHBOARD - Última atualização: {}".format(datetime.now().strftime("%H:%M:%S")))
+        print("\n🚀 DARWIN DASHBOARD - Última atualização: {}".format(datetime.now().strftime("%H:%M:%S")))
         print("="*80)
 
         for metric_name in key_metrics:
@@ -615,8 +614,8 @@ def example_monitoring():
     # Criar dashboard
     dashboard = DarwinDashboard(collector)
 
-    print("
-🌐 Dashboard iniciado!"    print("   📊 Métricas coletadas em tempo real")
+    print("\n🌐 Dashboard iniciado!")
+    print("   📊 Métricas coletadas em tempo real")
     print(f"   📁 Relatório salvo: {report_file}")
 
     return collector, dashboard
