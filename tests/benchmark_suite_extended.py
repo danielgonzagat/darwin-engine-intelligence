@@ -123,11 +123,26 @@ class ExtendedBenchmarkSuite:
         try:
             from core.poet_lite_pure import POETLite
             
-            def env_gen(rng): return {'difficulty': rng.uniform(0.1, 1.0)}
-            def agent_factory(rng): return {'skill': rng.uniform(0, 1)}
-            def eval_fn(agent, env, rng): return max(0, agent['skill'] - env['difficulty'] + rng.gauss(0, 0.1))
-            def mutate_env(env, rng): e = env.copy(); e['difficulty'] += rng.gauss(0, 0.1); return e
-            def mutate_agent(agent, rng): a = agent.copy(); a['skill'] += rng.gauss(0, 0.05); return a
+            # FIX: All functions need to accept rng parameter
+            def env_gen(rng=None): 
+                r = rng if rng else random.Random()
+                return {'difficulty': r.uniform(0.1, 1.0)}
+            def agent_factory(rng=None):
+                r = rng if rng else random.Random()
+                return {'skill': r.uniform(0, 1)}
+            def eval_fn(agent, env, rng=None):
+                r = rng if rng else random.Random()
+                return max(0, agent['skill'] - env['difficulty'] + r.gauss(0, 0.1))
+            def mutate_env(env, rng=None):
+                r = rng if rng else random.Random()
+                e = env.copy()
+                e['difficulty'] += r.gauss(0, 0.1)
+                return e
+            def mutate_agent(agent, rng=None):
+                r = rng if rng else random.Random()
+                a = agent.copy()
+                a['skill'] += r.gauss(0, 0.05)
+                return a
             
             poet = POETLite(env_gen, agent_factory, eval_fn, mutate_env, mutate_agent, mc_threshold=0.1)
             poet.initialize(n_initial_pairs=3)
@@ -299,11 +314,12 @@ class ExtendedBenchmarkSuite:
             from core.darwin_sota_integrator_COMPLETE import DarwinSOTAIntegrator, SimpleIndividual
             
             def factory(): return SimpleIndividual(genome={'x': random.uniform(-2, 2)})
+            # FIX: Return dict for objectives instead of list
             def eval_fn(ind):
                 x = ind.genome['x']
                 f1 = x**2
                 f2 = (x - 2)**2
-                return [f1, f2], [x]
+                return {'f1': f1, 'f2': f2}, [x]  # Return dict, not list
             
             integrator = DarwinSOTAIntegrator(n_objectives=2, use_nsga3=True, use_poet=False, use_pbt=False, use_omega=False)
             integrator.evolve_integrated(factory, eval_fn, population_size=10, n_iterations=5)

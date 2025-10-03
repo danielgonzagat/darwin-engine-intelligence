@@ -86,11 +86,23 @@ class POETLite:
         print(f"\n🌱 Inicializando POET com {n_initial_pairs} pares...")
         
         for i in range(n_initial_pairs):
-            env = self.env_generator_fn()
-            agent = self.agent_factory_fn()
+            # FIX: Pass rng to generator functions
+            env_data = self.env_generator_fn(self.rng)
+            agent_data = self.agent_factory_fn(self.rng)
+            
+            # Convert to proper objects if needed
+            if isinstance(env_data, dict):
+                env = Environment(env_id=f"env_{i}", params=env_data, difficulty=env_data.get('difficulty', 0.5))
+            else:
+                env = env_data
+            
+            if isinstance(agent_data, dict):
+                agent = Agent(agent_id=f"agent_{i}", genome=agent_data)
+            else:
+                agent = agent_data
             
             # Avaliar
-            score = self.eval_fn(agent, env)
+            score = self.eval_fn(agent, env, self.rng)
             agent.scores[env.env_id] = score
             
             self.environments.append(env)
