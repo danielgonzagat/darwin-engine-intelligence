@@ -14,7 +14,6 @@ STATUS: FUNCIONAL E TESTADO
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path("/root/intelligence_system")))
 
 import logging
 import random
@@ -29,9 +28,24 @@ import json
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
 
-from extracted_algorithms.darwin_engine_real import DarwinEngine, ReproductionEngine, Individual
-from models.mnist_classifier import MNISTClassifier, MNISTNet
-from agents.cleanrl_ppo_agent import PPOAgent, PPONetwork
+# Local gene pool for cross-system sharing
+from .darwin_gene_pool import GlobalGenePool
+
+
+class PPONetwork(nn.Module):
+    """Minimal MLP for CartPole policy/value outputs."""
+    def __init__(self, obs_dim: int, act_dim: int, hidden: int):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, hidden), nn.Tanh(),
+            nn.Linear(hidden, hidden), nn.Tanh(),
+        )
+        self.pi = nn.Linear(hidden, act_dim)
+        self.v  = nn.Linear(hidden, 1)
+
+    def forward(self, x):
+        h = self.net(x)
+        return self.pi(h), self.v(h)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -105,7 +119,17 @@ class EvolvableMNIST:
         - Resultado: Accuracy 90%+ ao invés de 10%
         """
         try:
-            model = self.build()
+            # Determinism and device selection
+            seed = 1337
+            torch.manual_seed(seed)
+            np.random.seed(seed)
+            random.seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+            model = self.build().to(device)
             
             # Carregar datasets
             from torchvision import datasets, transforms
@@ -145,8 +169,9 @@ class EvolvableMNIST:
             for epoch in range(10):  # ✅ OTIMIZADO: 10 épocas para 97%+ accuracy
                 for batch_idx, (data, target) in enumerate(train_loader):
                     optimizer.zero_grad()              # ← Zera gradientes
-                    output = model(data)               # ← Forward pass
-                    loss = F.cross_entropy(output, target)  # ← Calcula loss
+                    data, target = data.to(device), target.to(device)
+                    output = model(data)
+                    loss = F.cross_entropy(output, target)
                     loss.backward()                    # ← BACKPROPAGATION!
                     optimizer.step()                   # ← Atualiza pesos!
                     
@@ -161,19 +186,28 @@ class EvolvableMNIST:
             
             with torch.no_grad():
                 for data, target in test_loader:
+                    data, target = data.to(device), target.to(device)
                     output = model(data)
                     pred = output.argmax(dim=1)
                     correct += pred.eq(target).sum().item()
                     total += len(data)
             
-            accuracy = correct / total  # ← Agora ~90%+ (antes: ~10%)
-            
+            accuracy = correct / total
+
             # Penalizar complexidade
             complexity = sum(p.numel() for p in model.parameters())
-            complexity_penalty = complexity / 1000000
-            
-            # Fitness final (garantir não-negativo)
-            self.fitness = max(0.0, accuracy - (0.1 * complexity_penalty))  # ✅ CORRIGIDO: Problema #10
+            complexity_penalty = complexity / 1_000_000.0
+
+            # Multi-objective (weighted sum placeholder)
+            objectives = {
+                'accuracy': float(accuracy),
+                'efficiency': float(1.0 - complexity_penalty),
+            }
+            weights = {'accuracy': 0.85, 'efficiency': 0.15}
+            fitness_val = sum(weights[k] * objectives[k] for k in objectives)
+
+            # Garantir não-negativo
+            self.fitness = max(0.0, fitness_val)
             
             logger.info(f"   📊 MNIST Genome: {self.genome}")
             logger.info(f"   📊 Accuracy: {accuracy:.4f} | Complexity: {complexity}")
@@ -378,6 +412,7 @@ class DarwinEvolutionOrchestrator:
         self.output_dir.mkdir(exist_ok=True)
         
         self.evolution_log = []
+        self.gene_pool = GlobalGenePool()
         
         logger.info("="*80)
         logger.info("🧬 DARWIN EVOLUTION SYSTEM - VERSÃO CORRIGIDA")
@@ -409,17 +444,55 @@ class DarwinEvolutionOrchestrator:
         best_individual = None
         best_fitness = 0.0
         
+        # Simple Fibonacci cadence: increase exploration (mutation) at Fibonacci generations
+        fib = {1, 2, 3, 5, 8, 13, 21, 34, 55, 89}
         for gen in range(generations):
             logger.info(f"\n🧬 Geração {gen+1}/{generations}")
-            
-            # ✅ CORRIGIDO: Avaliação PARALELA
-            logger.info(f"   Avaliando {len(population)} indivíduos em paralelo...")
             
             # Avaliação sequencial (paralelização causa problemas com PyTorch)
             for idx, individual in enumerate(population):
                 if idx % 10 == 0:
                     logger.info(f"   Progresso: {idx}/{len(population)}")
                 individual.evaluate_fitness()
+
+            # Aplicar novelty search leve baseado em distância no espaço de genomas
+            def _genome_vector(ind):
+                vec = []
+                for k, v in ind.genome.items():
+                    if isinstance(v, (int, float)):
+                        vec.append(float(v))
+                return vec
+
+            def _euclid(a, b):
+                n = min(len(a), len(b))
+                if n == 0:
+                    return 0.0
+                return float(sum((a[i] - b[i]) ** 2 for i in range(n)) ** 0.5)
+
+            genome_vecs = [_genome_vector(ind) for ind in population]
+            k = max(1, min(5, len(population) - 1))
+            novelty_scores = []
+            for i, vi in enumerate(genome_vecs):
+                dists = []
+                for j, vj in enumerate(genome_vecs):
+                    if i == j:
+                        continue
+                    dists.append(_euclid(vi, vj))
+                dists.sort()
+                avg_k = sum(dists[:k]) / float(k) if dists else 0.0
+                novelty_scores.append(avg_k)
+
+            # Normalizar novelty para [0,1]
+            if novelty_scores:
+                mn, mx = min(novelty_scores), max(novelty_scores)
+                denom = (mx - mn) or 1.0
+                novelty_norm = [(s - mn) / denom for s in novelty_scores]
+            else:
+                novelty_norm = [0.0 for _ in population]
+
+            # Recombinar com performance (90/10)
+            for ind, nov in zip(population, novelty_norm):
+                ind.fitness = 0.9 * float(ind.fitness) + 0.1 * float(nov)
             
             # Ordenar por fitness
             population.sort(key=lambda x: x.fitness, reverse=True)
@@ -431,8 +504,12 @@ class DarwinEvolutionOrchestrator:
             
             logger.info(f"\n   🏆 Melhor fitness: {best_fitness:.4f}")
             logger.info(f"   📊 Genoma: {best_individual.genome}")
+
+            # Registrar genes bons no pool global
+            for gene_name, gene_value in best_individual.genome.items():
+                self.gene_pool.register_good_gene("mnist", gene_name, gene_value, best_fitness)
             
-            # ✅ CORRIGIDO: Seleção com ELITISMO
+            # Seleção com ELITISMO
             elite_size = 5
             elite = population[:elite_size]  # Top 5 SEMPRE sobrevivem
             
@@ -444,17 +521,28 @@ class DarwinEvolutionOrchestrator:
             logger.info(f"   🏆 Elite preservada: {len(elite)} indivíduos")
             logger.info(f"   ✅ Sobreviventes: {len(survivors)}/{population_size}")
             
+            # Reprodução (com pequena pressão por diversidade via mutação mais alta em baixa diversidade)
+            # Diversidade simples por desvio-padrão de fitness
+            fitness_values = [ind.fitness for ind in population]
+            diversity = float(np.std(fitness_values)) if fitness_values else 0.0
+            base_mutation_rate = 0.2
+            adaptive_mutation_rate = min(0.6, base_mutation_rate + (0.2 if diversity < 0.02 else 0.0))
+            if (gen + 1) in fib:
+                adaptive_mutation_rate = min(0.6, adaptive_mutation_rate + 0.1)
+
             # Reprodução
             offspring = []
             while len(survivors) + len(offspring) < population_size:
                 if random.random() < 0.8:  # 80% sexual
                     parent1, parent2 = random.sample(survivors, 2)
                     child = parent1.crossover(parent2)  # ← Usa crossover corrigido
-                    child = child.mutate()
+                    child = child.mutate(mutation_rate=adaptive_mutation_rate)
                 else:  # 20% asexual
                     parent = random.choice(survivors)
-                    child = parent.mutate()
+                    child = parent.mutate(mutation_rate=adaptive_mutation_rate)
                 
+                # Cross-pollination (leve)
+                self.gene_pool.cross_pollinate(child, target_system="mnist", probability=0.05)
                 offspring.append(child)
             
             population = survivors + offspring
@@ -467,7 +555,7 @@ class DarwinEvolutionOrchestrator:
                 'best_genome': best_individual.genome
             })
             
-            # ✅ CORRIGIDO: Problema #9 - CHECKPOINTING
+            # Checkpointing a cada 10 gerações
             if (gen + 1) % 10 == 0:
                 checkpoint = {
                     'generation': gen + 1,
@@ -482,6 +570,18 @@ class DarwinEvolutionOrchestrator:
                 with open(checkpoint_path, 'w') as f:
                     json.dump(checkpoint, f, indent=2)
                 logger.info(f"   💾 Checkpoint saved: gen {gen+1} → {checkpoint_path.name}")
+                # WORM log (best-effort)
+                try:
+                    from darwin_main.darwin.worm import log_event
+                    log_event({
+                        'type': 'checkpoint',
+                        'system': 'MNIST',
+                        'generation': gen + 1,
+                        'best_fitness': best_fitness,
+                        'elite_size': elite_size,
+                    })
+                except Exception:
+                    pass
         
         # Salvar melhor
         result_path = self.output_dir / "mnist_best_evolved_FIXED.json"
